@@ -141,6 +141,10 @@
   /* ===================== Рендер карточек ===================== */
 
   var listEl = document.getElementById('cardList');
+  var idleGridEl = document.createElement('div');
+  idleGridEl.className = 'idle-grid';
+  listEl.appendChild(idleGridEl);
+
   var cardRefs = {}; // id -> { trackEl, knobEl, timeEl, nameEl, sublabelEl, trackWidth }
   var alertedThisRun = {}; // id -> bool, чтобы не повторять сигнал каждый тик после входа в овертайм
   var isFirstRender = true;
@@ -163,7 +167,7 @@
           '<svg class="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>' +
         '</div>' +
       '</div>';
-    listEl.appendChild(card);
+    idleGridEl.appendChild(card); // изначально все карточки неактивны — в сетке 2 колонки
 
     cardRefs[t.id] = {
       card: card,
@@ -180,8 +184,8 @@
   /* ===================== Отрисовка состояния ===================== */
 
   function knobTravel(trackEl){
-    // расстояние, на которое смещается кружок (56px) внутри трека
-    return trackEl.clientWidth - 56 - 8; // минус padding слева/справа (4+4)
+    // расстояние, на которое смещается кружок (32px, отступ 4px с каждой стороны)
+    return trackEl.clientWidth - 32 - 8;
   }
 
   /* ===================== Тема ===================== */
@@ -220,32 +224,24 @@
 
   function render(){
     var now = Date.now();
+    var views = {};
 
     TIMERS.forEach(function(t){
       var ref = cardRefs[t.id];
       var ts = state[t.id];
       var view = computeTimerView(t, ts, now);
+      views[t.id] = view;
 
       var track = ref.track;
-      var knob = ref.knob;
-
-      // На самом первом рендере (загрузка/перезагрузка страницы) отключаем
-      // CSS-transition у кружка, чтобы он появился сразу в нужной точке,
-      // а не "прилетал" туда анимацией из позиции 0.
-      if(isFirstRender){
-        knob.style.transition = 'none';
-      }
 
       track.classList.remove('is-running', 'is-overtime', 'state-warn', 'state-danger', 'dragging');
       ref.name.classList.remove('state-warn', 'state-danger');
 
       if(view.phase === 'idle'){
-        knob.style.transform = 'translateX(0px)';
         ref.time.textContent = formatTime(t.duration);
       }
       else if(view.phase === 'running'){
         track.classList.add('is-running');
-        knob.style.transform = 'translateX(' + knobTravel(track) + 'px)';
         ref.time.textContent = formatTime(view.remaining);
 
         if(view.remaining <= DANGER_THRESHOLD_SEC){
@@ -258,7 +254,6 @@
       }
       else if(view.phase === 'overtime'){
         track.classList.add('is-running', 'is-overtime');
-        knob.style.transform = 'translateX(' + knobTravel(track) + 'px)';
         ref.time.textContent = formatTime(view.displaySeconds);
 
         if(!alertedThisRun[t.id]){
@@ -270,7 +265,27 @@
       ref.card.classList.toggle('is-active', view.phase === 'running' || view.phase === 'overtime');
     });
 
+    // Сначала переставляем карточки (активные наверх, во всю ширину) —
+    // только после этого ширина трека внутри каждой карточки станет окончательной.
     reorderCards();
+
+    // Теперь, когда геометрия карточек уже актуальна, выставляем позицию кружка.
+    // На первом рендере страницы — без анимации, чтобы кружок не "прилетал" из исходной точки.
+    TIMERS.forEach(function(t){
+      var ref = cardRefs[t.id];
+      var knob = ref.knob;
+      var view = views[t.id];
+
+      if(isFirstRender){
+        knob.style.transition = 'none';
+      }
+
+      if(view.phase === 'idle'){
+        knob.style.transform = 'translateX(0px)';
+      } else {
+        knob.style.transform = 'translateX(' + knobTravel(ref.track) + 'px)';
+      }
+    });
 
     if(isFirstRender){
       // Возвращаем transition на следующем кадре, чтобы дальнейшие
@@ -287,32 +302,47 @@
   /* ===================== Перенос активного таймера наверх (FLIP) ===================== */
 
   function reorderCards(){
-    // Собираем позиции до изменения порядка
+    var activeIds = TIMERS.filter(function(t){ return cardRefs[t.id].card.classList.contains('is-active'); }).map(function(t){ return t.id; });
+    var idleIds = TIMERS.filter(function(t){ return !cardRefs[t.id].card.classList.contains('is-active'); }).map(function(t){ return t.id; });
+
+    // На самом первом рендере (загрузка/перезагрузка страницы) расставляем
+    // карточки по нужным контейнерам сразу, без анимации перелёта — они
+    // должны быть на своих местах с первого кадра.
+    if(isFirstRender){
+      activeIds.forEach(function(id){
+        listEl.insertBefore(cardRefs[id].card, idleGridEl);
+      });
+      idleIds.forEach(function(id){
+        idleGridEl.appendChild(cardRefs[id].card);
+      });
+      return;
+    }
+
+    // Проверяем, нужна ли вообще перестановка
+    var activeNow = Array.prototype.filter.call(listEl.children, function(el){ return el !== idleGridEl; });
+    var activeNowIds = activeNow.map(function(el){
+      return Object.keys(cardRefs).find(function(id){ return cardRefs[id].card === el; });
+    });
+    var sameOrder = activeNowIds.length === activeIds.length && activeNowIds.every(function(id, i){ return id === activeIds[i]; });
+    if(sameOrder) return;
+
+    // Собираем позиции до изменения порядка (только для карточек, которые двигаются)
     var firstRects = {};
     TIMERS.forEach(function(t){
       firstRects[t.id] = cardRefs[t.id].card.getBoundingClientRect();
     });
 
-    // Активные таймеры (running или overtime) поднимаем наверх, остальные — по исходному порядку
-    var activeIds = TIMERS.filter(function(t){ return cardRefs[t.id].card.classList.contains('is-active'); }).map(function(t){ return t.id; });
-    var idleIds = TIMERS.filter(function(t){ return !cardRefs[t.id].card.classList.contains('is-active'); }).map(function(t){ return t.id; });
-    var newOrder = activeIds.concat(idleIds);
-
-    var orderChanged = false;
-    newOrder.forEach(function(id, index){
-      var ref = cardRefs[id];
-      var desiredOrder = String(index);
-      if(ref.card.style.order !== desiredOrder){
-        orderChanged = true;
-      }
-      ref.card.style.order = desiredOrder;
+    activeIds.forEach(function(id){
+      listEl.insertBefore(cardRefs[id].card, idleGridEl);
     });
-
-    if(!orderChanged) return;
+    idleIds.forEach(function(id){
+      idleGridEl.appendChild(cardRefs[id].card);
+    });
 
     // FLIP: измеряем новые позиции, инвертируем смещение через transform,
     // затем анимируем к нулевому смещению — карточка "перелетает" на новое место.
-    newOrder.forEach(function(id){
+    TIMERS.forEach(function(t){
+      var id = t.id;
       var ref = cardRefs[id];
       var card = ref.card;
       var first = firstRects[id];
@@ -448,5 +478,25 @@
   });
 
   window.addEventListener('resize', render);
+
+  // Шрифт Google Sans подключён с font-display: swap — первая отрисовка
+  // может произойти на системном fallback-шрифте, у которого иная ширина
+  // символов. Когда настоящий шрифт догружается, ширина трека может
+  // измениться, и кружок (позиционированный под старую ширину) сместится.
+  // Пересчитываем позицию кружков сразу после готовности шрифтов, без
+  // анимации, чтобы не было заметного "доезда" в сторону.
+  if(document.fonts && document.fonts.ready){
+    document.fonts.ready.then(function(){
+      TIMERS.forEach(function(t){
+        cardRefs[t.id].knob.style.transition = 'none';
+      });
+      render();
+      requestAnimationFrame(function(){
+        TIMERS.forEach(function(t){
+          cardRefs[t.id].knob.style.transition = '';
+        });
+      });
+    });
+  }
 
 })();

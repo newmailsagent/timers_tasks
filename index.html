@@ -157,13 +157,19 @@
   }
 
   .card-list{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-auto-rows: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 7px;
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+    justify-content: flex-start;
+  }
+
+  .idle-grid{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
   }
 
   /* ---------- Card ---------- */
@@ -176,7 +182,9 @@
     transition: border-color 0.3s ease, background-color 0.3s ease;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     min-height: 0;
+    overflow: hidden;
   }
 
   .card.is-overtime{
@@ -184,7 +192,7 @@
   }
 
   .card.is-active{
-    grid-column: 1 / -1;
+    flex-shrink: 0;
   }
 
   .card-top{
@@ -226,9 +234,9 @@
 
   .track{
     position: relative;
-    flex: 1 1 auto;
-    min-height: 38px;
-    border-radius: 22px;
+    flex: 0 0 auto;
+    height: 40px;
+    border-radius: 9999px;
     background: var(--idle-track);
     overflow: hidden;
     touch-action: none;
@@ -296,9 +304,9 @@
 
   .knob{
     position: absolute;
-    top: 3px; left: 3px;
+    top: 4px; left: 4px;
     width: 32px; height: 32px;
-    border-radius: 22px;
+    border-radius: 9999px;
     background: var(--text);
     display: flex;
     align-items: center;
