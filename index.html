@@ -76,7 +76,6 @@
     color: var(--text);
     font-family: var(--sans);
     -webkit-font-smoothing: antialiased;
-    overscroll-behavior-y: none;
     transition: background-color 0.25s ease, color 0.25s ease;
   }
 
@@ -170,6 +169,8 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 7px;
+    width: 100%;
+    min-width: 0;
   }
 
   /* ---------- Card ---------- */
@@ -184,6 +185,8 @@
     flex-direction: column;
     justify-content: center;
     min-height: 0;
+    min-width: 0;
+    width: 100%;
     overflow: hidden;
   }
 
