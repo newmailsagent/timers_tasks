@@ -143,6 +143,7 @@
   var listEl = document.getElementById('cardList');
   var cardRefs = {}; // id -> { trackEl, knobEl, timeEl, nameEl, sublabelEl, trackWidth }
   var alertedThisRun = {}; // id -> bool, чтобы не повторять сигнал каждый тик после входа в овертайм
+  var isFirstRender = true;
 
   TIMERS.forEach(function(t){
     var card = document.createElement('div');
@@ -228,6 +229,13 @@
       var track = ref.track;
       var knob = ref.knob;
 
+      // На самом первом рендере (загрузка/перезагрузка страницы) отключаем
+      // CSS-transition у кружка, чтобы он появился сразу в нужной точке,
+      // а не "прилетал" туда анимацией из позиции 0.
+      if(isFirstRender){
+        knob.style.transition = 'none';
+      }
+
       track.classList.remove('is-running', 'is-overtime', 'state-warn', 'state-danger', 'dragging');
       ref.name.classList.remove('state-warn', 'state-danger');
 
@@ -258,6 +266,69 @@
           fireAlert();
         }
       }
+
+      ref.card.classList.toggle('is-active', view.phase === 'running' || view.phase === 'overtime');
+    });
+
+    reorderCards();
+
+    if(isFirstRender){
+      // Возвращаем transition на следующем кадре, чтобы дальнейшие
+      // запуски/остановки таймера снова анимировались как обычно.
+      requestAnimationFrame(function(){
+        TIMERS.forEach(function(t){
+          cardRefs[t.id].knob.style.transition = '';
+        });
+      });
+      isFirstRender = false;
+    }
+  }
+
+  /* ===================== Перенос активного таймера наверх (FLIP) ===================== */
+
+  function reorderCards(){
+    // Собираем позиции до изменения порядка
+    var firstRects = {};
+    TIMERS.forEach(function(t){
+      firstRects[t.id] = cardRefs[t.id].card.getBoundingClientRect();
+    });
+
+    // Активные таймеры (running или overtime) поднимаем наверх, остальные — по исходному порядку
+    var activeIds = TIMERS.filter(function(t){ return cardRefs[t.id].card.classList.contains('is-active'); }).map(function(t){ return t.id; });
+    var idleIds = TIMERS.filter(function(t){ return !cardRefs[t.id].card.classList.contains('is-active'); }).map(function(t){ return t.id; });
+    var newOrder = activeIds.concat(idleIds);
+
+    var orderChanged = false;
+    newOrder.forEach(function(id, index){
+      var ref = cardRefs[id];
+      var desiredOrder = String(index);
+      if(ref.card.style.order !== desiredOrder){
+        orderChanged = true;
+      }
+      ref.card.style.order = desiredOrder;
+    });
+
+    if(!orderChanged) return;
+
+    // FLIP: измеряем новые позиции, инвертируем смещение через transform,
+    // затем анимируем к нулевому смещению — карточка "перелетает" на новое место.
+    newOrder.forEach(function(id){
+      var ref = cardRefs[id];
+      var card = ref.card;
+      var first = firstRects[id];
+      var last = card.getBoundingClientRect();
+      var dx = first.left - last.left;
+      var dy = first.top - last.top;
+
+      if(dx === 0 && dy === 0) return;
+
+      card.style.transition = 'none';
+      card.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
+
+      requestAnimationFrame(function(){
+        card.style.transition = 'transform 0.4s cubic-bezier(0.2,0.8,0.2,1)';
+        card.style.transform = '';
+      });
     });
   }
 
@@ -337,11 +408,11 @@
       var shouldBeRunning;
 
       if(wasRunningAtStart){
-        // обратный свайп: если уползли влево хотя бы на треть — останавливаем
-        shouldBeRunning = ratio > 0.65;
+        // обратный свайп: останавливаем, если ушли влево хотя бы на треть пути
+        shouldBeRunning = ratio > (1 - 1/3);
       } else {
-        // прямой свайп: если уползли вправо хотя бы на 60% — запускаем
-        shouldBeRunning = ratio > 0.6;
+        // прямой свайп: запускаем, если прошли хотя бы треть пути
+        shouldBeRunning = ratio > 1/3;
       }
 
       if(shouldBeRunning && !wasRunningAtStart){
