@@ -163,8 +163,10 @@
           '<span class="track-sublabel" data-role="sublabel">Перерасход</span>' +
         '</div>' +
         '<div class="knob" data-role="knob">' +
-          '<svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>' +
-          '<svg class="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>' +
+          '<div class="knob-dot">' +
+            '<svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>' +
+            '<svg class="icon-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>' +
+          '</div>' +
         '</div>' +
       '</div>';
     idleGridEl.appendChild(card); // изначально все карточки неактивны — в сетке 2 колонки

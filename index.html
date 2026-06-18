@@ -307,16 +307,26 @@
 
   .knob{
     position: absolute;
-    top: 4px; left: 4px;
+    top: -4px; left: -4px;
+    width: 48px; height: 48px;
+    border-radius: 9999px;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    will-change: transform;
+  }
+
+  .knob-dot{
     width: 32px; height: 32px;
     border-radius: 9999px;
     background: var(--text);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 3;
     transition: background-color 0.2s ease;
-    will-change: transform;
+    pointer-events: none;
   }
 
   .knob svg{
